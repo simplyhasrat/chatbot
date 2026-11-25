@@ -22,6 +22,8 @@ export default {
           950: '#19251A',
         },
         forest: {
+          700: '#223325',
+          750: '#1D2B20',
           800: '#1A251D',
           850: '#141E17',
           900: '#0E1610',
@@ -33,6 +35,15 @@ export default {
           400: '#DDA17E',
           500: '#C77D58',
         }
+      },
+      borderWidth: {
+        '3': '3px',
+      },
+      borderRadius: {
+        'xs': '2px',
+      },
+      boxShadow: {
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],

@@ -10,7 +10,7 @@ interface StreamOptions {
 export class AIEngine {
   /**
    * Generates a thoughtful, context-aware response.
-   * If Gemini API Key is provided in settings, makes an actual Gemini API call.
+   * If Gemini API Key is provided in settings or .env, connects to Google Gemini API.
    * Otherwise, provides high-fidelity simulated intelligence based on persona and queries.
    */
   async generateResponse(
@@ -33,7 +33,6 @@ export class AIEngine {
         return;
       } catch (err) {
         console.warn('Gemini API call failed, falling back to built-in Sage engine:', err);
-        // Fall back to built-in simulation below
       }
     }
 
@@ -43,14 +42,12 @@ export class AIEngine {
   }
 
   private async simulateStream(text: string, speedMs: number, options: StreamOptions) {
-    // If speed is 0, return immediately
     if (speedMs <= 0) {
       options.onChunk(text, text);
       options.onComplete(text);
       return;
     }
 
-    // Split text into variable natural tokens (words or small character groups)
     const tokens = text.match(/(\s+|\S+)/g) || [text];
     let accumulated = '';
 
@@ -61,7 +58,6 @@ export class AIEngine {
       accumulated += tokens[i];
       options.onChunk(tokens[i], accumulated);
 
-      // Natural cadence: slightly longer pause after punctuation
       let delay = speedMs;
       if (tokens[i].endsWith('.') || tokens[i].endsWith('?') || tokens[i].endsWith('!')) {
         delay = Math.min(speedMs * 3.5, 90);
@@ -144,26 +140,30 @@ export class AIEngine {
   }
 
   private generateSmartResponse(query: string, personaId: string, history: Message[]): string {
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
 
-    // Check query themes
-    if (q.includes('hello') || q.includes('hi') || q.includes('hey') || q === 'who are you') {
+    if (!q) {
+      return `Hello! How can I assist your focus today? Feel free to ask a question, request code, or explore an idea.`;
+    }
+
+    // Check greetings
+    if (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hello') || q.startsWith('hi ') || q === 'who are you') {
       if (personaId === 'sage-code') {
-        return `Hello! I'm **Code Artisan**, your engineering partner. 
+        return `Hello! I'm **Code Artisan**, your engineering partner.
 
-Whether you're architecting scalable distributed systems, crafting clean React components, or hunting down subtle concurrency bugs, I'm here with clean idiomatic patterns.
+Whether you're architecting scalable systems, crafting clean React components, or hunting down subtle bugs, I'm here with clean idiomatic patterns.
 
 What are you working on today?
-- **Component or API Design**
+- **Component & API Design**
 - **Refactoring & Performance Optimization**
-- **TypeScript Typings & Patterns**
+- **TypeScript Patterns**
 - **Testing & Edge Cases**`;
       }
 
       if (personaId === 'sage-wellness') {
         return `Welcome. Take a gentle breath in... and let it out softly. 🌿
 
-I am **Zen Sanctuary**, your mindful space for reflection, decompression, and balanced living. In the middle of busy days and constant screens, it's essential to preserve quiet clarity.
+I am **Zen Sanctuary**, your mindful space for reflection, decompression, and balanced living.
 
 How can I support your balance today?
 - *A short 2-minute centering exercise*
@@ -172,15 +172,49 @@ How can I support your balance today?
 - *Setting compassionate boundaries*`;
       }
 
-      return `Warm greetings. I am **Sage Mind**, your companion for thoughtful reflection, strategic clarity, and focused insight.
+      if (personaId === 'sage-scribe') {
+        return `Warm greetings. I am **Sage Scribe**, your writing and storytelling companion.
+
+I can help you craft compelling essays, executive emails, brand stories, or articulate prose that resonates.
+
+What shall we write together?`;
+      }
+
+      return `Warm greetings! I am **Sage Mind**, your companion for thoughtful reflection, strategic clarity, and focused insight.
 
 I'm here to help you unpack complex challenges into clean, structured, and manageable steps.
 
 Where shall our focus begin today?
 - **Strategic planning & problem solving**
-- **Creative writing & refined communication**
-- **Explaining deep concepts simply**
-- **Organizing thoughts into actionable blueprints**`;
+- **Deep concept synthesis**
+- **Creative exploration**
+- **Actionable blueprints**`;
+    }
+
+    // Math calculation query
+    const mathMatch = q.match(/^(?:what is|calculate|solve)?\s*([\d\s+\-*/().^%]+)$/);
+    if (mathMatch && mathMatch[1].trim() && /[\d]/.test(mathMatch[1])) {
+      try {
+        const expression = mathMatch[1].trim();
+        // Safe evaluation of basic arithmetic
+        if (/^[0-9+\-*/().\s^%]+$/.test(expression)) {
+          // eslint-disable-next-line no-eval
+          const result = Function(`'use strict'; return (${expression.replace(/\^/g, '**')})`)();
+          return `### Calculation Result
+
+The solution to \`${expression}\` is:
+
+# **${result}**
+
+\`\`\`text
+${expression} = ${result}
+\`\`\`
+
+Need further breakdown or step-by-step mathematical reasoning?`;
+        }
+      } catch {
+        // Fall through
+      }
     }
 
     // Coding & technical queries
@@ -195,11 +229,12 @@ Where shall our focus begin today?
       q.includes('bug') ||
       q.includes('refactor') ||
       q.includes('architecture') ||
+      q.includes('component') ||
       personaId === 'sage-code'
     ) {
-      return `### Elegant Solution & Architecture
+      return `### Clean Architecture & Solution
 
-Here is a clean, production-grade approach designed with high readability, strict type safety, and defensive resilience.
+Here is a clean, production-grade implementation designed with readability, type safety, and defensive resilience:
 
 \`\`\`typescript
 import { useState, useEffect, useRef } from 'react';
@@ -234,14 +269,14 @@ export function useDebounce<T>(value: T, delayMs: number = 300): T {
 }
 \`\`\`
 
-#### Key Architectural Highlights:
-1. **Memory Safety**: Clean disposal of active timers in the \`useEffect\` cleanup prevents stray memory leaks or state updates on unmounted trees.
-2. **Generic Typings**: Preserves exact TypeScript inferences without fallback \`any\` casts.
-3. **Ergonomic Usage**: Drop into search inputs, window resize listeners, or autosave loops with zero configuration.
+#### Architectural Highlights:
+1. **Memory Safety**: Clean disposal of active timers in the \`useEffect\` cleanup prevents memory leaks.
+2. **Strict Type Safety**: Preserves exact TypeScript inferences with generics without fallback \`any\`.
+3. **Ergonomic Usage**: Works seamlessly with inputs, resize observers, or autosave triggers.
 
 > *"Simplicity is prerequisite for reliability."* — Edsger W. Dijkstra
 
-Would you like me to tailor this for cancellation tokens or add unit test fixtures using Vitest?`;
+Would you like me to tailor this for cancellation tokens or unit test fixtures?`;
     }
 
     // Mindfulness & Wellness queries
@@ -260,15 +295,15 @@ Would you like me to tailor this for cancellation tokens or add unit test fixtur
 Let's pause the momentum of your day for just sixty seconds. Wherever you are right now, invite your shoulders to drop away from your ears, and release any tension held in your jaw.
 
 #### The 4-4-6 Calming Breath Practice:
-1. **Inhale gently** through your nose for a slow count of **4**. Feel the cool air expand your lower ribs.
+1. **Inhale gently** through your nose for a slow count of **4**. Feel the cool air expand your ribs.
 2. **Hold softly** at the peak of the breath for a count of **4**. Maintain softness, without straining.
 3. **Exhale steadily** through your mouth for an extended count of **6**. Notice the quiet grounding in your feet and seat.
 
-> **Mindful Reflection**: *You do not have to solve everything in this single hour. Focus on the singular step that is right in front of you.*
+> **Mindful Reflection**: *You do not have to solve everything in this single hour. Focus on the singular step right in front of you.*
 
-#### Three Gentle Questions for Today:
+#### Three Gentle Inquiries for Today:
 * What is one obligation you can gracefully decline or postpone?
-* Have you nourished your body with water and daylight today?
+* Have you nourished your body with hydration and daylight today?
 * What small victory can you appreciate yourself for right now?
 
 Take all the time you need. I'm right here with you.`;
@@ -285,7 +320,7 @@ Take all the time you need. I'm right here with you.`;
     ) {
       return `### Refined & Articulate Draft
 
-Here is a polished, persuasive draft crafted with natural rhythm, tactful assertiveness, and clarity:
+Here is a polished draft crafted with natural rhythm, tactful assertiveness, and clarity:
 
 > **Subject:** Collaborative Update: Aligning on Next Milestones & Deliverables
 >
@@ -308,7 +343,7 @@ Here is a polished, persuasive draft crafted with natural rhythm, tactful assert
 - **Cadence**: Short punchy clauses prevent cognitive fatigue in busy readers.
 - **Actionability**: Bulleted milestones make commitments unmistakably clear.
 
-Would you like me to adjust the register toward a more formal executive audience or a closer informal peer group?`;
+Would you like me to adjust the register toward a more formal executive audience or a closer peer group?`;
     }
 
     // Default general insightful response

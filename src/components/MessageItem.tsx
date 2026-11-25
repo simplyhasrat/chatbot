@@ -73,7 +73,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       <div className="flex justify-end mb-6 group animate-slide-up">
         <div className="flex items-end space-x-2 max-w-[88%] sm:max-w-[78%]">
           <div className="flex flex-col items-end">
-            <div className="bg-sage-600 dark:bg-sage-700 text-white px-4 py-3 rounded-2xl rounded-tr-xs shadow-sm text-sm sm:text-base leading-relaxed break-words">
+            <div className="bg-sage-600 dark:bg-sage-700 text-white px-4 py-3 rounded-2xl rounded-tr-sm shadow-sm text-sm sm:text-base leading-relaxed break-words">
               {message.content}
             </div>
 
@@ -113,7 +113,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             <span className="text-[10px] text-sage-500 dark:text-sage-400">{formatTime(message.timestamp)}</span>
           </div>
 
-          <div className="bg-white dark:bg-forest-900 border border-sage-200/90 dark:border-forest-800 rounded-2xl rounded-tl-xs p-4 sm:p-5 shadow-xs text-sage-900 dark:text-sage-100 transition-colors">
+          <div className="bg-white dark:bg-forest-900 border border-sage-200/90 dark:border-forest-800 rounded-2xl rounded-tl-sm p-4 sm:p-5 shadow-xs text-sage-900 dark:text-sage-100 transition-colors">
             <MarkdownRenderer content={message.content} />
 
             {/* Typewriter cursor indicator while streaming */}

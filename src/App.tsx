@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversation, Message, Persona, AppSettings } from './types';
 import { PERSONAS } from './utils/personas';
-import { Storage, defaultSettings } from './utils/storage';
+import { Storage } from './utils/storage';
 import { aiEngine } from './utils/aiEngine';
 import { soundFx } from './utils/sound';
 import { speechService } from './utils/speech';
@@ -12,8 +12,27 @@ import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
 
 export const App: React.FC = () => {
-  const [conversations, setConversations] = useState<Conversation[]>(() => Storage.getConversations());
-  const [activeId, setActiveId] = useState<string | null>(() => Storage.getActiveId());
+  // Initialize conversations with at least one active conversation
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const saved = Storage.getConversations();
+    if (saved && saved.length > 0) return saved;
+    const initialConv: Conversation = {
+      id: `conv_${Date.now()}_initial`,
+      title: 'New Conversation',
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      personaId: PERSONAS[0].id,
+    };
+    return [initialConv];
+  });
+
+  const [activeId, setActiveId] = useState<string>(() => {
+    const savedId = Storage.getActiveId();
+    if (savedId) return savedId;
+    return `conv_${Date.now()}_initial`;
+  });
+
   const [settings, setSettings] = useState<AppSettings>(() => Storage.getSettings());
   const [activePersona, setActivePersona] = useState<Persona>(PERSONAS[0]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -23,16 +42,40 @@ export const App: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Active conversation object
-  const activeConversation = conversations.find((c) => c.id === activeId) || null;
+  const activeConversation = conversations.find((c) => c.id === activeId) || conversations[0] || null;
 
-  // Sync dark class on document html
+  // Sync active ID if current becomes invalid
+  useEffect(() => {
+    if (conversations.length > 0 && !conversations.some((c) => c.id === activeId)) {
+      setActiveId(conversations[0].id);
+    }
+  }, [conversations, activeId]);
+
+  // Sync dark/light theme including system preferences
   useEffect(() => {
     const root = document.documentElement;
-    if (settings.theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+    const applyTheme = () => {
+      const isDark =
+        settings.theme === 'dark' ||
+        (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    if (settings.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      mediaQuery.addEventListener('change', applyTheme);
+      return () => mediaQuery.removeEventListener('change', applyTheme);
     }
+  }, [settings.theme]);
+
+  // Persist settings
+  useEffect(() => {
     Storage.saveSettings(settings);
   }, [settings]);
 
@@ -46,17 +89,26 @@ export const App: React.FC = () => {
     Storage.saveActiveId(activeId);
   }, [activeId]);
 
-  // Sync active persona when conversation changes
+  // Sync active persona when active conversation changes
   useEffect(() => {
     if (activeConversation) {
       const match = PERSONAS.find((p) => p.id === activeConversation.personaId);
       if (match) setActivePersona(match);
     }
-  }, [activeId]);
+  }, [activeConversation?.personaId]);
 
   // Create new conversation
-  const handleNewConversation = (persona?: Persona) => {
+  const handleNewConversation = useCallback((persona?: Persona) => {
     const p = persona || activePersona;
+    // If the currently active conversation is already empty, just switch to it and update persona
+    if (activeConversation && activeConversation.messages.length === 0) {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === activeConversation.id ? { ...c, personaId: p.id } : c))
+      );
+      setActivePersona(p);
+      return activeConversation;
+    }
+
     const newConv: Conversation = {
       id: `conv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: 'New Conversation',
@@ -70,12 +122,12 @@ export const App: React.FC = () => {
     setActiveId(newConv.id);
     setActivePersona(p);
     return newConv;
-  };
+  }, [activeConversation, activePersona]);
 
-  // Change persona
+  // Change persona for active conversation
   const handleSelectPersona = (persona: Persona) => {
     setActivePersona(persona);
-    if (activeConversation && activeConversation.messages.length === 0) {
+    if (activeConversation) {
       setConversations((prev) =>
         prev.map((c) => (c.id === activeConversation.id ? { ...c, personaId: persona.id } : c))
       );
@@ -100,6 +152,7 @@ export const App: React.FC = () => {
       targetConv = handleNewConversation();
     }
 
+    const currentConvId = targetConv.id;
     const userMessage: Message = {
       id: `msg_user_${Date.now()}`,
       role: 'user',
@@ -116,7 +169,6 @@ export const App: React.FC = () => {
       isStreaming: true,
     };
 
-    // Update conversation title from first user query if still default
     const isFirstMessage = targetConv.messages.length === 0;
     const newTitle = isFirstMessage
       ? text.slice(0, 32).trim() + (text.length > 32 ? '...' : '')
@@ -127,7 +179,7 @@ export const App: React.FC = () => {
     // Optimistically update conversation state
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === targetConv!.id
+        c.id === currentConvId
           ? {
               ...c,
               title: newTitle,
@@ -151,7 +203,7 @@ export const App: React.FC = () => {
           onChunk: (_chunk, fullText) => {
             setConversations((prev) =>
               prev.map((c) => {
-                if (c.id !== targetConv!.id) return c;
+                if (c.id !== currentConvId) return c;
                 return {
                   ...c,
                   messages: c.messages.map((m) =>
@@ -166,7 +218,7 @@ export const App: React.FC = () => {
           onComplete: (fullText) => {
             setConversations((prev) =>
               prev.map((c) => {
-                if (c.id !== targetConv!.id) return c;
+                if (c.id !== currentConvId) return c;
                 return {
                   ...c,
                   messages: c.messages.map((m) =>
@@ -197,13 +249,12 @@ export const App: React.FC = () => {
   const handleRegenerate = async () => {
     if (!activeConversation || activeConversation.messages.length < 2 || isStreaming) return;
 
+    const currentConvId = activeConversation.id;
     const lastMessage = activeConversation.messages[activeConversation.messages.length - 1];
     if (lastMessage.role !== 'assistant') return;
 
-    // Remove the last assistant message
     const trimmedMessages = activeConversation.messages.slice(0, -1);
     const lastUserQuery = trimmedMessages[trimmedMessages.length - 1];
-
     if (!lastUserQuery || lastUserQuery.role !== 'user') return;
 
     const assistantPlaceholderId = `msg_asst_${Date.now()}`;
@@ -217,7 +268,7 @@ export const App: React.FC = () => {
 
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === activeConversation.id
+        c.id === currentConvId
           ? {
               ...c,
               messages: [...trimmedMessages, newAssistantMessage],
@@ -239,7 +290,7 @@ export const App: React.FC = () => {
           onChunk: (_chunk, fullText) => {
             setConversations((prev) =>
               prev.map((c) => {
-                if (c.id !== activeConversation.id) return c;
+                if (c.id !== currentConvId) return c;
                 return {
                   ...c,
                   messages: c.messages.map((m) =>
@@ -254,7 +305,7 @@ export const App: React.FC = () => {
           onComplete: (fullText) => {
             setConversations((prev) =>
               prev.map((c) => {
-                if (c.id !== activeConversation.id) return c;
+                if (c.id !== currentConvId) return c;
                 return {
                   ...c,
                   messages: c.messages.map((m) =>
@@ -326,10 +377,24 @@ export const App: React.FC = () => {
 
   // Delete conversation
   const handleDeleteConversation = (id: string) => {
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (activeId === id) {
-      const remaining = conversations.filter((c) => c.id !== id);
-      setActiveId(remaining.length > 0 ? remaining[0].id : null);
+    const updated = conversations.filter((c) => c.id !== id);
+    if (updated.length === 0) {
+      // Always keep at least one fresh conversation
+      const freshConv: Conversation = {
+        id: `conv_${Date.now()}_fresh`,
+        title: 'New Conversation',
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        personaId: activePersona.id,
+      };
+      setConversations([freshConv]);
+      setActiveId(freshConv.id);
+    } else {
+      setConversations(updated);
+      if (activeId === id) {
+        setActiveId(updated[0].id);
+      }
     }
   };
 
@@ -343,8 +408,16 @@ export const App: React.FC = () => {
   // Clear all chats
   const handleClearAllChats = () => {
     Storage.clearAllData();
-    setConversations([]);
-    setActiveId(null);
+    const freshConv: Conversation = {
+      id: `conv_${Date.now()}_fresh`,
+      title: 'New Conversation',
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      personaId: activePersona.id,
+    };
+    setConversations([freshConv]);
+    setActiveId(freshConv.id);
   };
 
   return (

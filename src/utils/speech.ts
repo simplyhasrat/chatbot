@@ -21,7 +21,7 @@ interface SpeechRecognitionInstance {
   stop: () => void;
   abort: () => void;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: unknown) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
 }
 
@@ -35,6 +35,9 @@ declare global {
 export class SpeechService {
   private recognition: SpeechRecognitionInstance | null = null;
   private isListening = false;
+  private baseText = '';
+  private confirmedText = '';
+  private voices: SpeechSynthesisVoice[] = [];
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -45,6 +48,19 @@ export class SpeechService {
         this.recognition.interimResults = true;
         this.recognition.lang = 'en-US';
       }
+
+      if (window.speechSynthesis) {
+        this.loadVoices();
+        window.speechSynthesis.onvoiceschanged = () => {
+          this.loadVoices();
+        };
+      }
+    }
+  }
+
+  private loadVoices() {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      this.voices = window.speechSynthesis.getVoices();
     }
   }
 
@@ -53,26 +69,31 @@ export class SpeechService {
   }
 
   startListening(
-    onText: (text: string, isFinal: boolean) => void,
+    initialText: string,
+    onUpdate: (fullText: string) => void,
     onEnd: () => void,
     onError: (err: unknown) => void
   ) {
     if (!this.recognition || this.isListening) return;
 
+    this.baseText = initialText.trim();
+    this.confirmedText = '';
+
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = '';
-      let final = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const item = event.results[i];
+        const text = item[0].transcript;
         if (item.isFinal) {
-          final += item[0].transcript;
+          this.confirmedText += (this.confirmedText ? ' ' : '') + text.trim();
         } else {
-          interim += item[0].transcript;
+          interim += text;
         }
       }
 
-      onText(final || interim, Boolean(final));
+      const parts = [this.baseText, this.confirmedText, interim.trim()].filter(Boolean);
+      onUpdate(parts.join(' '));
     };
 
     this.recognition.onerror = (e) => {
@@ -110,18 +131,28 @@ export class SpeechService {
     const cleanedText = text
       .replace(/```[\s\S]*?```/g, 'Code block omitted.')
       .replace(/`([^`]+)`/g, '$1')
-      .replace(/[*_#~]/g, '')
+      .replace(/[*_#~>]/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .trim();
+
+    if (!cleanedText) return;
 
     const utterance = new SpeechSynthesisUtterance(cleanedText);
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
 
-    // Pick a natural English voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(
-      (v) => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel')) && v.lang.startsWith('en')
+    if (this.voices.length === 0) {
+      this.loadVoices();
+    }
+
+    const naturalVoice = this.voices.find(
+      (v) =>
+        (v.name.includes('Natural') ||
+          v.name.includes('Google') ||
+          v.name.includes('Samantha') ||
+          v.name.includes('Daniel') ||
+          v.name.includes('Karen')) &&
+        v.lang.startsWith('en')
     );
     if (naturalVoice) {
       utterance.voice = naturalVoice;

@@ -4,7 +4,6 @@ import {
   Square, 
   Mic, 
   MicOff, 
-  Paperclip, 
   X, 
   Sparkles,
   ArrowUp
@@ -53,10 +52,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
+      textareaRef.current.focus();
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Avoid triggering during IME composition (e.g. mobile keyboards or non-Latin input)
+    if (e.nativeEvent.isComposing) return;
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -75,8 +78,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } else {
       setIsListening(true);
       speechService.startListening(
-        (transcript) => {
-          setText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        text,
+        (updatedFullText) => {
+          setText(updatedFullText);
         },
         () => setIsListening(false),
         (err) => {
@@ -101,7 +105,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               key={idx}
               onClick={() => {
                 if (onSelectPrompt) onSelectPrompt(item.prompt);
-                else setText(item.prompt);
+                else {
+                  setText(item.prompt);
+                  textareaRef.current?.focus();
+                }
                 if (soundEnabled) soundFx.playClick();
               }}
               className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/90 dark:bg-forest-900 border border-sage-200 dark:border-forest-800 text-sage-800 dark:text-sage-200 hover:bg-sage-100 dark:hover:bg-forest-800 hover:border-sage-300 dark:hover:border-forest-700 transition-all shadow-xs"
@@ -123,7 +130,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
             <button
               onClick={toggleSpeechRecognition}
-              className="text-sage-500 hover:text-sage-800 font-semibold text-xs"
+              className="text-sage-500 hover:text-sage-800 dark:hover:text-white font-semibold text-xs"
             >
               Done
             </button>
@@ -161,7 +168,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {text && (
               <button
                 type="button"
-                onClick={() => setText('')}
+                onClick={() => {
+                  setText('');
+                  textareaRef.current?.focus();
+                }}
                 className="p-2 text-sage-400 hover:text-sage-600 dark:hover:text-sage-200 transition-colors"
                 title="Clear input"
               >

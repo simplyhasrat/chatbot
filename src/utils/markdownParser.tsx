@@ -86,11 +86,12 @@ const CodeSnippet: React.FC<{ code: string; language: string }> = ({ code, langu
   );
 };
 
-// Parse paragraphs, bold, lists, inline code, headings, blockquotes
+// Parse paragraphs, bold, lists, tables, inline code, headings, blockquotes
 function renderFormattedText(text: string): React.ReactNode[] {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
   let currentList: { ordered: boolean; items: string[] } | null = null;
+  let currentTable: { headers: string[]; rows: string[][] } | null = null;
 
   const flushList = () => {
     if (currentList) {
@@ -119,6 +120,38 @@ function renderFormattedText(text: string): React.ReactNode[] {
     }
   };
 
+  const flushTable = () => {
+    if (currentTable) {
+      elements.push(
+        <div key={`table-${elements.length}`} className="overflow-x-auto my-3 rounded-xl border border-sage-200 dark:border-forest-800">
+          <table className="min-w-full divide-y divide-sage-200 dark:divide-forest-800 text-xs sm:text-sm">
+            <thead className="bg-sage-100/70 dark:bg-forest-850">
+              <tr>
+                {currentTable.headers.map((h, idx) => (
+                  <th key={idx} className="px-3.5 py-2 text-left font-semibold text-sage-900 dark:text-sage-100">
+                    {formatInline(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-sage-100 dark:divide-forest-850 bg-white dark:bg-forest-900">
+              {currentTable.rows.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-sage-50/50 dark:hover:bg-forest-850/50">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="px-3.5 py-2 text-sage-800 dark:text-sage-200">
+                      {formatInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      currentTable = null;
+    }
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
@@ -126,6 +159,38 @@ function renderFormattedText(text: string): React.ReactNode[] {
     // Empty line
     if (!trimmed) {
       flushList();
+      flushTable();
+      continue;
+    }
+
+    // Markdown Table row
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      flushList();
+      const cells = trimmed
+        .slice(1, -1)
+        .split('|')
+        .map((c) => c.trim());
+
+      // Check if it's separator row (e.g. |---|---|)
+      const isSeparator = cells.every((c) => /^:?-+:?$/.test(c));
+      if (isSeparator) {
+        continue;
+      }
+
+      if (!currentTable) {
+        currentTable = { headers: cells, rows: [] };
+      } else {
+        currentTable.rows.push(cells);
+      }
+      continue;
+    } else {
+      flushTable();
+    }
+
+    // Horizontal rule
+    if (trimmed === '---' || trimmed === '***') {
+      flushList();
+      elements.push(<hr key={`hr-${i}`} className="my-3 border-sage-200 dark:border-forest-800" />);
       continue;
     }
 
@@ -164,7 +229,7 @@ function renderFormattedText(text: string): React.ReactNode[] {
       elements.push(
         <blockquote
           key={`quote-${i}`}
-          className="pl-3.5 py-1.5 my-2 border-l-3 border-sage-400 dark:border-sage-600 bg-sage-50/70 dark:bg-forest-900/50 rounded-r-lg italic text-sage-800 dark:text-sage-200"
+          className="pl-3.5 py-1.5 my-2 border-l-4 border-sage-500 dark:border-sage-600 bg-sage-50/70 dark:bg-forest-900/50 rounded-r-lg italic text-sage-800 dark:text-sage-200"
         >
           {formatInline(trimmed.substring(2))}
         </blockquote>
@@ -204,13 +269,13 @@ function renderFormattedText(text: string): React.ReactNode[] {
   }
 
   flushList();
+  flushTable();
   return elements;
 }
 
 // Format inline code `code`, bold **text**, italic *text*, links [label](url)
 function formatInline(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
-  // Tokenize regex for inline code `code`, bold **text**, and links [text](url)
   const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
