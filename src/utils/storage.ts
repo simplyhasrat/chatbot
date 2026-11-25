@@ -6,12 +6,15 @@ const STORAGE_KEYS = {
   SETTINGS: 'sage_chatbot_settings_v1',
 };
 
+const envApiKey = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim() || '';
+
 export const defaultSettings: AppSettings = {
   theme: 'light',
   soundEnabled: true,
   speechOutputEnabled: false,
-  streamSpeed: 15,
-  apiProvider: 'builtin',
+  streamSpeed: Number(import.meta.env.VITE_DEFAULT_STREAM_SPEED) || 15,
+  apiKey: envApiKey,
+  apiProvider: envApiKey ? 'gemini' : 'builtin',
   userAvatarName: 'You',
 };
 

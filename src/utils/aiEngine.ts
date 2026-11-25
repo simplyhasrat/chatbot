@@ -23,14 +23,17 @@ export class AIEngine {
     const latestMessage = messages[messages.length - 1];
     const query = latestMessage?.content.trim() || '';
 
-    // If user configured a Gemini API key
-    if (settings.apiProvider === 'gemini' && settings.apiKey?.trim()) {
+    // Check if Gemini API key is provided via UI settings or .env file
+    const envApiKey = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim() || '';
+    const activeApiKey = settings.apiKey?.trim() || envApiKey;
+
+    if ((settings.apiProvider === 'gemini' || (!settings.apiKey && envApiKey)) && activeApiKey) {
       try {
-        await this.streamGeminiResponse(messages, activePersona.systemPrompt, settings.apiKey, options);
+        await this.streamGeminiResponse(messages, activePersona.systemPrompt, activeApiKey, options);
         return;
       } catch (err) {
         console.warn('Gemini API call failed, falling back to built-in Sage engine:', err);
-        // Fall back to built-in simulation below with a soft alert
+        // Fall back to built-in simulation below
       }
     }
 
