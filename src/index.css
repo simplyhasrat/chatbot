@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-sage-bg: #F5F7F5;
+    --color-sage-surface: #FFFFFF;
+    --color-sage-border: #E0E8E0;
+    --color-sage-primary: #5F8260;
+    --color-sage-hover: #4B674C;
+  }
+
+  .dark {
+    --color-sage-bg: #0F1711;
+    --color-sage-surface: #162219;
+    --color-sage-border: #233427;
+    --color-sage-primary: #789F79;
+    --color-sage-hover: #95B796;
+  }
+
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #B5CEB5;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2D4232;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #789F79;
+}
+
+/* Smooth typing cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 16px;
+  background-color: #5F8260;
+  margin-left: 2px;
+  vertical-align: middle;
+  border-radius: 2px;
+  animation: blink 0.8s infinite;
+}
+
+.dark .typing-cursor {
+  background-color: #95B796;
+}
+
+/* Frosted glass utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dark .glass-panel {
+  background: rgba(22, 34, 25, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
